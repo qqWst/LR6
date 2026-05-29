@@ -49,6 +49,38 @@ const unsigned char Inv_S_box[256] = {
 
 const unsigned char Rcon[10] = { 0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1b,0x36 };
 
+// Добавление паддинга
+void AddPKCS7Padding(vector<unsigned char>& data, int blockSize = 16) {
+    int padLen = blockSize - (data.size() % blockSize);
+    for (int i = 0; i < padLen; ++i) {
+        data.push_back(static_cast<unsigned char>(padLen));
+    }
+}
+
+// Удаление паддинга после расшифровки
+void RemovePKCS7Padding(vector<unsigned char>& data, int blockSize = 16) {
+    if (data.empty()) return;
+    
+    int padLen = data.back();
+    
+    // Проверка на корректность значения паддинга (от 1 до 16)
+    if (padLen < 1 || padLen > blockSize || padLen > data.size()) {
+        cout << "Ошибка: Некорректный паддинг!" << endl;
+        return; 
+    }
+
+    // Проверяем, действительно ли последние 'padLen' байт равны значению 'padLen'
+    for (size_t i = data.size() - padLen; i < data.size(); ++i) {
+        if (data[i] != padLen) {
+            cout << "Ошибка: Паддинг поврежден!" << endl;
+            return;
+        }
+    }
+    
+    // Удаляем паддинг
+    data.erase(data.end() - padLen, data.end());
+}
+
 void printHex(const unsigned char* data, int len) {
     for (int idx = 0; idx < len; ++idx) {
         cout << hex << setw(2) << setfill('0') << static_cast<int>(data[idx]) << " ";
@@ -87,7 +119,6 @@ void generateRandomKey(unsigned char* key) {
     }
 }
 
-
 unsigned char GF_mult(unsigned char a, unsigned char b) {
     unsigned char result = 0;
     while (b > 0) {
@@ -121,18 +152,15 @@ void InvSubBytes(unsigned char matrix[4][4]) {
 }
 
 void ShiftRows(unsigned char matrix[4][4]) {
-    // Сдвиг 1-й строки на 1
     unsigned char first_val = matrix[1][0];
     matrix[1][0] = matrix[1][1];
     matrix[1][1] = matrix[1][2];
     matrix[1][2] = matrix[1][3];
     matrix[1][3] = first_val;
 
-    // Сдвиг 2-й строки на 2
     swap(matrix[2][0], matrix[2][2]);
     swap(matrix[2][1], matrix[2][3]);
 
-    // Сдвиг 3-й строки на 3 (или вправо на 1)
     unsigned char last_val = matrix[3][3];
     matrix[3][3] = matrix[3][2];
     matrix[3][2] = matrix[3][1];
@@ -141,18 +169,15 @@ void ShiftRows(unsigned char matrix[4][4]) {
 }
 
 void InvShiftRows(unsigned char matrix[4][4]) {
-    // Вправо на 1
     unsigned char last_val = matrix[1][3];
     matrix[1][3] = matrix[1][2];
     matrix[1][2] = matrix[1][1];
     matrix[1][1] = matrix[1][0];
     matrix[1][0] = last_val;
 
-    // Вправо на 2
     swap(matrix[2][0], matrix[2][2]);
     swap(matrix[2][1], matrix[2][3]);
 
-    // Вправо на 3 (влево на 1)
     unsigned char first_val = matrix[3][0];
     matrix[3][0] = matrix[3][1];
     matrix[3][1] = matrix[3][2];
@@ -246,7 +271,6 @@ void EncryptBlock(unsigned char matrix[4][4], unsigned char round_keys[11][4][4]
         if (printState) printMatrix(matrix, "  После AddRoundKey " + to_string(rnd));
     }
 
-    // Последний раунд
     SubBytes(matrix);
     if (printState) printMatrix(matrix, "  После SubBytes (финал)");
     
@@ -396,7 +420,7 @@ void GenerateIV(unsigned char* iv) {
 int main() {
     setlocale(LC_ALL, "ru_RU.UTF-8");
     
-    cout << "=== AES-128 CFB ШИФРОВАНИЕ ===\n\n";
+    cout << "=== AES-128 CFB ШИФРОВАНИЕ С ПАДДИНГОМ PKCS#7 ===\n\n";
     
     unsigned char key[16];
     generateRandomKey(key);
@@ -411,10 +435,19 @@ int main() {
     vector<unsigned char> plain;
     StringToBytes(original, plain);
 
+    // Применяем паддинг ДО шифрования
+    cout << "\nРазмер текста ДО паддинга: " << plain.size() << " байт\n";
+    AddPKCS7Padding(plain);
+    cout << "Размер текста ПОСЛЕ паддинга: " << plain.size() << " байт\n";
+    
+    cout << "Текст с паддингом (в HEX): ";
+    for (unsigned char b : plain) cout << hex << setw(2) << setfill('0') << static_cast<int>(b) << " ";
+    cout << dec << "\n";
+
     unsigned char iv[16];
     GenerateIV(iv);
     
-    cout << "Сгенерированный IV: ";
+    cout << "\nСгенерированный IV: ";
     printHex(iv, 16);
 
     vector<unsigned char> textCript;
@@ -435,11 +468,14 @@ int main() {
     vector<unsigned char> decrypted;
     DecryptCFB(textCript, decrypted, key);
 
+    // Удаляем паддинг ПОСЛЕ расшифровки
+    RemovePKCS7Padding(decrypted);
+
     string result;
     BytesToString(decrypted, result);
     
     cout << "=== РЕЗУЛЬТАТ ===\n";
-    cout << "Расшифрованный текст: " << result << "\n";
+    cout << "Расшифрованный текст без паддинга: " << result << "\n";
 
     return 0;
 }
