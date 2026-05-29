@@ -1,60 +1,109 @@
+#include <GL/glut.h>
 #include <iostream>
-#include <vector>
-#include <string>
 #include <cmath>
-#include <locale>
 
 using namespace std;
 
-void fillTriangle(vector<string>& grid, int topRow, int topColumn, int size) {
-    for (int i = 0; i < size; i++) {
-        int r = topRow + i;
-        int left = topColumn - i;
-        int right = topColumn + i;
-        for (int c = left; c <= right; c++) {
-            if (r >= 0 && r < (int)grid.size() && c >= 0 && c < (int)grid[0].size())
-                grid[r][c] = 'o';
-        }
-    }
+int level = 0;               // уровень рекурсии
+int windowWidth = 800;
+int windowHeight = 600;
+
+// Рисование закрашенного треугольника по трём точкам
+void drawTriangle(float x1, float y1, float x2, float y2, float x3, float y3) {
+    glBegin(GL_TRIANGLES);
+        glVertex2f(x1, y1);
+        glVertex2f(x2, y2);
+        glVertex2f(x3, y3);
+    glEnd();
 }
 
-void sierpinski(vector<string>& grid, int topRow, int topColumn, int size, int level) {
-    if (level == 0) {
-        fillTriangle(grid, topRow, topColumn, size);
+// Рекурсивное построение треугольника Серпинского
+void sierpinski(float x1, float y1, float x2, float y2, float x3, float y3, int curLevel) {
+    if (curLevel == 0) {
+        drawTriangle(x1, y1, x2, y2, x3, y3);
         return;
     }
 
-    int half = size / 2;
+    // Вычисляем середины сторон
+    float mx12 = (x1 + x2) / 2.0f;
+    float my12 = (y1 + y2) / 2.0f;
+    float mx23 = (x2 + x3) / 2.0f;
+    float my23 = (y2 + y3) / 2.0f;
+    float mx31 = (x3 + x1) / 2.0f;
+    float my31 = (y3 + y1) / 2.0f;
 
-    sierpinski(grid, topRow,         topColumn,     half, level - 1);
-    sierpinski(grid, topRow + half,  topColumn - half, half, level - 1);
-    sierpinski(grid, topRow + half,  topColumn + half, half, level - 1);
-
+    // Три подтреугольника (центральный не рисуется)
+    sierpinski(x1, y1, mx12, my12, mx31, my31, curLevel - 1);
+    sierpinski(mx12, my12, x2, y2, mx23, my23, curLevel - 1);
+    sierpinski(mx31, my31, mx23, my23, x3, y3, curLevel - 1);
 }
 
-int main() {
-    setlocale(LC_ALL, "ru_RU.UTF-8");
+// Функция отображения
+void display() {
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColor3f(1.0f, 0.0f, 0.0f);   // красный цвет
 
-    int level;
-    cout << "Введите уровень рекурсии: ";
-    cin >> level;
+    // Координаты большого равностороннего треугольника
+    float x1 = -0.5f, y1 = -0.3f;      // левая нижняя вершина
+    float x2 =  0.5f, y2 = -0.3f;      // правая нижняя вершина
+    float x3 =  0.0f, y3 =  0.6f;      // верхняя вершина
 
-    if (level < 0) level = 0;
-    int size = 1 << level;
+    sierpinski(x1, y1, x2, y2, x3, y3, level);
 
-    int rows = size;
-    int cols = 2 * size - 1;
+    glutSwapBuffers();
+}
 
-    vector<string> grid(rows, string(cols, ' '));
+// Функция изменения размеров окна
+void reshape(int w, int h) {
+    windowWidth = w;
+    windowHeight = h;
+    glViewport(0, 0, w, h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    // Ортогональная проекция: координаты от -1 до 1 по X, от -1 до 1 по Y с учётом пропорций
+    if (w <= h)
+        gluOrtho2D(-1.0, 1.0, -1.0 * (float)h / w, 1.0 * (float)h / w);
+    else
+        gluOrtho2D(-1.0 * (float)w / h, 1.0 * (float)w / h, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+}
 
-    int topRow = 0;
-    int topColumn = cols / 2;
-
-    sierpinski(grid, topRow, topColumn, size, level);
-
-    for (int r = 0; r < rows; r++) {
-        cout << grid[r] << "\n";
+// Обработка нажатий клавиш
+void keyboard(unsigned char key, int x, int y) {
+    switch (key) {
+        case 'q':
+        case 27: // ESC
+            exit(0);
+            break;
+        case '+':
+            level++;
+            glutPostRedisplay();
+            break;
+        case '-':
+            if (level > 0) level--;
+            glutPostRedisplay();
+            break;
+        default:
+            break;
     }
+}
 
+int main(int argc, char** argv) {
+    cout << "Введите уровень рекурсии (0 и выше): ";
+    cin >> level;
+    if (level < 0) level = 0;
+
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+    glutInitWindowSize(windowWidth, windowHeight);
+    glutCreateWindow("Треугольник Серпинского");
+
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // чёрный фон
+
+    glutDisplayFunc(display);
+    glutReshapeFunc(reshape);
+    glutKeyboardFunc(keyboard);
+
+    glutMainLoop();
     return 0;
 }
